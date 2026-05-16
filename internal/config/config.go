@@ -4,7 +4,7 @@ import "os"
 
 const (
 	defaultHTTPAddr         = ":8080"
-	defaultLawDBPath        = "db/laws.db"
+	defaultLawDBPath        = "data/db/laws.db"
 	defaultLawDetailJSONDir = "data/law_json"
 )
 

@@ -69,6 +69,16 @@ func (h *LawHandler) ListLawsByType(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *LawHandler) GetHomeLaws(c *gin.Context) {
+	result, err := h.lawService.GetHomeLaws(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "查询首页法律数据失败")
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func (h *LawHandler) ListBigGroupStats(c *gin.Context) {
 	stats, err := h.lawService.ListBigGroupStats(c.Request.Context())
 	if err != nil {

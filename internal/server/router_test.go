@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/sqlite"
@@ -203,6 +204,104 @@ func TestGetParsedLawReturnsPlaceholderWhenFileMissing(t *testing.T) {
 	}
 }
 
+func TestGetHomeLawsReturnsThreeSections(t *testing.T) {
+	router := newTestRouter(t, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/home/laws", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	var resp envelope[service.HomeLawsResponse]
+	decodeJSON(t, recorder.Body.Bytes(), &resp)
+
+	if resp.Data.NewLawExpress.SectionTitle != "新法速递" {
+		t.Fatalf("unexpected new law section title: got %s", resp.Data.NewLawExpress.SectionTitle)
+	}
+	if resp.Data.LawCategories.SectionTitle != "法律概览" {
+		t.Fatalf("unexpected law categories section title: got %s", resp.Data.LawCategories.SectionTitle)
+	}
+	if resp.Data.CommonLaws.SectionTitle != "常用法律" {
+		t.Fatalf("unexpected common laws section title: got %s", resp.Data.CommonLaws.SectionTitle)
+	}
+
+	newItems := resp.Data.NewLawExpress.Items
+	if len(newItems) == 0 {
+		t.Fatalf("expected at least one new law item")
+	}
+	if len(newItems) > 6 {
+		t.Fatalf("new law items exceed limit: got %d want <=6", len(newItems))
+	}
+
+	foundRecent := false
+	for _, item := range newItems {
+		if item.UUID == "law-new-recent" {
+			foundRecent = true
+			if item.LawTypeDisplay != "最新发布法律" {
+				t.Fatalf("unexpected display name for recent law: got %s", item.LawTypeDisplay)
+			}
+		}
+	}
+	if !foundRecent {
+		t.Fatalf("expected law-new-recent in new law express section")
+	}
+
+	wantBgColors := []string{"#BF4A90D9", "#BF5C7A9E", "#BF7A5C9E"}
+	for i, item := range newItems {
+		if got, want := item.BgColor, wantBgColors[i%len(wantBgColors)]; got != want {
+			t.Fatalf("unexpected bgColor at index %d: got %s want %s", i, got, want)
+		}
+	}
+
+	categoryItems := resp.Data.LawCategories.Items
+	if got := len(categoryItems); got != 8 {
+		t.Fatalf("unexpected category count: got %d want 8", got)
+	}
+
+	wantCategoryOrder := []struct {
+		LawType string
+		Display string
+		Icon    string
+	}{
+		{"constitution", "宪法", "account_balance"},
+		{"constitution_related", "宪法相关法", "menu_book"},
+		{"criminal_law", "刑法", "security"},
+		{"civil_commercial_law", "民法商法", "groups"},
+		{"procedural_law", "诉讼与非诉讼法", "gavel"},
+		{"administrative_law", "行政法", "business_center"},
+		{"economic_law", "经济法", "account_balance_wallet"},
+		{"social_law", "社会法", "favorite"},
+	}
+	for i, want := range wantCategoryOrder {
+		got := categoryItems[i]
+		if got.LawType != want.LawType || got.LawTypeDisplay != want.Display || got.Icon != want.Icon {
+			t.Fatalf("unexpected category at index %d: got %+v want %+v", i, got, want)
+		}
+	}
+
+	commonItems := resp.Data.CommonLaws.Items
+	if got := len(commonItems); got != 7 {
+		t.Fatalf("unexpected common law count: got %d want 7", got)
+	}
+
+	countByLawType := make(map[string]int, len(commonItems))
+	for _, item := range commonItems {
+		countByLawType[item.LawType] = item.Count
+	}
+	if got := countByLawType["marriage_family"]; got < 1 {
+		t.Fatalf("expected marriage_family count >= 1 from seeded title, got %d", got)
+	}
+	if got := countByLawType["labor_personnel"]; got < 1 {
+		t.Fatalf("expected labor_personnel count >= 1 from seeded title, got %d", got)
+	}
+	if got := countByLawType["criminal_case"]; got != 0 {
+		t.Fatalf("expected criminal_case count = 0 (no seeded match), got %d", got)
+	}
+}
+
 func TestGetParsedLawReturnsNotFoundWhenVersionIDDoesNotExist(t *testing.T) {
 	router := newTestRouter(t, t.TempDir())
 
@@ -267,10 +366,16 @@ func createTestSQLiteDatabase(t *testing.T) string {
 		}
 	}
 
+	insertType(t, db, 100, "宪法", nil)
 	insertType(t, db, 101, "法律(全选)", nil)
 	insertType(t, db, 102, "法律", intPtr(101))
 	insertType(t, db, 110, "宪法相关法", intPtr(102))
 	insertType(t, db, 120, "民法商法", intPtr(102))
+	insertType(t, db, 130, "行政法", intPtr(102))
+	insertType(t, db, 140, "经济法", intPtr(102))
+	insertType(t, db, 150, "社会法", intPtr(102))
+	insertType(t, db, 160, "刑法", intPtr(102))
+	insertType(t, db, 170, "诉讼与非诉讼法", intPtr(102))
 	insertType(t, db, 222, "地方法规", nil)
 	insertType(t, db, 230, "地方性法规", intPtr(222))
 
@@ -289,6 +394,15 @@ func createTestSQLiteDatabase(t *testing.T) string {
 		date := fmt.Sprintf("2024-03-%02d", i)
 		insertLaw(t, db, versionID, title, 230, "地方性法规", date, date, 1, "地方人大")
 	}
+
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	future := now.AddDate(0, 1, 0).Format("2006-01-02")
+	insertLaw(t, db, "law-new-recent", "最新发布法律", 110, "法律", today, future, 1, "全国人大")
+
+	// 给「常用法律」的关键字统计准备命中数据；挂在 110 上避免影响其它分类的排序/计数断言
+	insertLaw(t, db, "law-marriage-1", "中华人民共和国婚姻法", 110, "法律", "2001-04-28", "2001-04-28", 1, "全国人大")
+	insertLaw(t, db, "law-labor-1", "中华人民共和国劳动合同法", 110, "法律", "2007-06-29", "2008-01-01", 1, "全国人大")
 
 	return dbPath
 }

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -41,6 +42,61 @@ func (r *LawRepository) ListByType(ctx context.Context, typeID, offset, limit in
 	}
 
 	return laws, nil
+}
+
+func (r *LawRepository) ListNewLaws(ctx context.Context, publishCutoff, today string, limit int) ([]model.LawSummary, error) {
+	var laws []model.LawSummary
+
+	err := r.db.WithContext(ctx).
+		Model(&model.LawList{}).
+		Select("versionId, title, lawTypeId, lawType, publishDate, effectDate, effectiveStatus, authorityName").
+		Where(
+			"(TRIM(COALESCE(publishDate, '')) != '' AND publishDate >= ?) OR (TRIM(COALESCE(effectDate, '')) = '' OR effectDate > ?)",
+			publishCutoff, today,
+		).
+		Order(`
+			CASE WHEN publishDate IS NULL OR TRIM(publishDate) = '' THEN 1 ELSE 0 END ASC,
+			publishDate DESC,
+			versionId DESC
+		`).
+		Limit(limit).
+		Find(&laws).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return laws, nil
+}
+
+func (r *LawRepository) CountByTitleKeywords(ctx context.Context, keywords []string) (int64, error) {
+	if len(keywords) == 0 {
+		return 0, nil
+	}
+
+	conditions := make([]string, 0, len(keywords))
+	args := make([]any, 0, len(keywords))
+	for _, kw := range keywords {
+		kw = strings.TrimSpace(kw)
+		if kw == "" {
+			continue
+		}
+		conditions = append(conditions, "title LIKE ?")
+		args = append(args, "%"+kw+"%")
+	}
+	if len(conditions) == 0 {
+		return 0, nil
+	}
+
+	var total int64
+	err := r.db.WithContext(ctx).
+		Model(&model.LawList{}).
+		Where(strings.Join(conditions, " OR "), args...).
+		Count(&total).Error
+	if err != nil {
+		return 0, err
+	}
+
+	return total, nil
 }
 
 func (r *LawRepository) CountByType(ctx context.Context, typeID int) (int64, error) {

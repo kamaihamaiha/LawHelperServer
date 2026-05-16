@@ -38,6 +38,22 @@ func (r *TypeRepository) ListConcreteTypesWithLawCount(ctx context.Context) ([]m
 	return types, nil
 }
 
+func (r *TypeRepository) ListByIDs(ctx context.Context, ids []int) ([]model.Type, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var types []model.Type
+	err := r.db.WithContext(ctx).
+		Where("id IN ?", ids).
+		Find(&types).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return types, nil
+}
+
 func (r *TypeRepository) GetByID(ctx context.Context, id int) (*model.Type, error) {
 	var lawType model.Type
 

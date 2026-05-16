@@ -17,6 +17,7 @@ func NewRouter(lawHandler *handler.LawHandler) *gin.Engine {
 	api.GET("/types/:typeId/laws", lawHandler.ListLawsByType)
 	api.GET("/laws/big-groups", lawHandler.ListBigGroupStats)
 	api.GET("/laws/:versionId/parsed", lawHandler.GetParsedLaw)
+	api.GET("/home/laws", lawHandler.GetHomeLaws)
 
 	return router
 }
