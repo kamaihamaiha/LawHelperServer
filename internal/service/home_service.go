@@ -30,6 +30,9 @@ type NewLawItem struct {
 	Subtitle       string `json:"subtitle"`
 	BgColor        string `json:"bgColor"`
 	LinkUrl        string `json:"linkUrl"`
+	PublishDate    string `json:"publishDate"`    // 发布日期 (年月日)
+	EffectDate     string `json:"effectDate"`     // 生效日期
+	AuthorityName  string `json:"authorityName"`  // 发布机关
 }
 
 type LawCategoriesSection struct {
@@ -154,6 +157,9 @@ func (s *LawService) buildHomeLaws(ctx context.Context, now time.Time) (*HomeLaw
 			Subtitle:       buildNewLawSubtitle(law.PublishDate, law.AuthorityName),
 			BgColor:        newLawBgColors[i%len(newLawBgColors)],
 			LinkUrl:        "",
+			PublishDate:    law.PublishDate,
+			EffectDate:     law.EffectDate,
+			AuthorityName:  law.AuthorityName,
 		})
 	}
 

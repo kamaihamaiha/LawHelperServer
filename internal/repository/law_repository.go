@@ -68,6 +68,48 @@ func (r *LawRepository) ListNewLaws(ctx context.Context, publishCutoff, today st
 	return laws, nil
 }
 
+func (r *LawRepository) ListNewLawsPaginated(ctx context.Context, publishCutoff, today string, offset, limit int) ([]model.LawSummary, error) {
+	var laws []model.LawSummary
+
+	err := r.db.WithContext(ctx).
+		Model(&model.LawList{}).
+		Select("versionId, title, lawTypeId, lawType, publishDate, effectDate, effectiveStatus, authorityName").
+		Where(
+			"(TRIM(COALESCE(publishDate, '')) != '' AND publishDate >= ?) OR (TRIM(COALESCE(effectDate, '')) = '' OR effectDate > ?)",
+			publishCutoff, today,
+		).
+		Order(`
+			CASE WHEN publishDate IS NULL OR TRIM(publishDate) = '' THEN 1 ELSE 0 END ASC,
+			publishDate DESC,
+			versionId DESC
+		`).
+		Offset(offset).
+		Limit(limit).
+		Find(&laws).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return laws, nil
+}
+
+func (r *LawRepository) CountNewLaws(ctx context.Context, publishCutoff, today string) (int64, error) {
+	var total int64
+
+	err := r.db.WithContext(ctx).
+		Model(&model.LawList{}).
+		Where(
+			"(TRIM(COALESCE(publishDate, '')) != '' AND publishDate >= ?) OR (TRIM(COALESCE(effectDate, '')) = '' OR effectDate > ?)",
+			publishCutoff, today,
+		).
+		Count(&total).Error
+	if err != nil {
+		return 0, err
+	}
+
+	return total, nil
+}
+
 func (r *LawRepository) CountByTitleKeywords(ctx context.Context, keywords []string) (int64, error) {
 	if len(keywords) == 0 {
 		return 0, nil
@@ -105,6 +147,46 @@ func (r *LawRepository) CountByType(ctx context.Context, typeID int) (int64, err
 	err := r.db.WithContext(ctx).
 		Model(&model.LawList{}).
 		Where("lawTypeId = ?", typeID).
+		Count(&total).Error
+	if err != nil {
+		return 0, err
+	}
+
+	return total, nil
+}
+
+func (r *LawRepository) ListByTypeIDs(ctx context.Context, typeIDs []int, offset, limit int) ([]model.LawSummary, error) {
+	if len(typeIDs) == 0 {
+		return nil, nil
+	}
+
+	var laws []model.LawSummary
+
+	err := r.db.WithContext(ctx).
+		Model(&model.LawList{}).
+		Select("versionId, title, lawTypeId, lawType, publishDate, effectDate, effectiveStatus, authorityName").
+		Where("lawTypeId IN ?", typeIDs).
+		Order(lawListOrder).
+		Offset(offset).
+		Limit(limit).
+		Find(&laws).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return laws, nil
+}
+
+func (r *LawRepository) CountByTypeIDs(ctx context.Context, typeIDs []int) (int64, error) {
+	if len(typeIDs) == 0 {
+		return 0, nil
+	}
+
+	var total int64
+
+	err := r.db.WithContext(ctx).
+		Model(&model.LawList{}).
+		Where("lawTypeId IN ?", typeIDs).
 		Count(&total).Error
 	if err != nil {
 		return 0, err

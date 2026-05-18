@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"LawHelperServer/internal/model"
 	"LawHelperServer/internal/repository"
@@ -68,6 +69,24 @@ type PaginatedCommonLawList struct {
 	TotalPages int                 `json:"totalPages"`
 	Items      []model.LawSummary  `json:"items"`
 }
+
+type PaginatedNewLawList struct {
+	Page       int                `json:"page"`
+	PageSize   int                `json:"pageSize"`
+	Total      int64              `json:"total"`
+	TotalPages int                `json:"totalPages"`
+	Items      []model.LawSummary `json:"items"`
+}
+
+// 类型ID分组
+var (
+	// 行政法规类型ID
+	AdminRegulationTypeIDs = []int{210, 215}
+	// 司法解释类型ID
+	JudicialInterpretationTypeIDs = []int{320, 330, 340, 350}
+	// 地方法律类型ID
+	LocalLawTypeIDs = []int{222, 230, 260, 270, 290, 295, 300, 305, 310}
+)
 
 type ParsedLawDetail struct {
 	VersionID string           `json:"versionId"`
@@ -175,6 +194,68 @@ func (s *LawService) ListCommonLawsByType(ctx context.Context, typeID, page, pag
 			LawTypeDisplay: commonLawType.LawTypeDisplay,
 			Icon:           commonLawType.Icon,
 		},
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages(total, pageSize),
+		Items:      items,
+	}, nil
+}
+
+func (s *LawService) ListNewLaws(ctx context.Context, page, pageSize int) (*PaginatedNewLawList, error) {
+	page, pageSize = normalizePagination(page, pageSize)
+
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	cutoff := now.AddDate(0, -6, 0).Format("2006-01-02")
+
+	total, err := s.lawRepo.CountNewLaws(ctx, cutoff, today)
+	if err != nil {
+		return nil, err
+	}
+
+	offset := (page - 1) * pageSize
+	items, err := s.lawRepo.ListNewLawsPaginated(ctx, cutoff, today, offset, pageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return &PaginatedNewLawList{
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages(total, pageSize),
+		Items:      items,
+	}, nil
+}
+
+func (s *LawService) ListAdminRegulations(ctx context.Context, page, pageSize int) (*PaginatedNewLawList, error) {
+	return s.listLawsByTypeIDs(ctx, AdminRegulationTypeIDs, page, pageSize)
+}
+
+func (s *LawService) ListJudicialInterpretations(ctx context.Context, page, pageSize int) (*PaginatedNewLawList, error) {
+	return s.listLawsByTypeIDs(ctx, JudicialInterpretationTypeIDs, page, pageSize)
+}
+
+func (s *LawService) ListLocalLaws(ctx context.Context, page, pageSize int) (*PaginatedNewLawList, error) {
+	return s.listLawsByTypeIDs(ctx, LocalLawTypeIDs, page, pageSize)
+}
+
+func (s *LawService) listLawsByTypeIDs(ctx context.Context, typeIDs []int, page, pageSize int) (*PaginatedNewLawList, error) {
+	page, pageSize = normalizePagination(page, pageSize)
+
+	total, err := s.lawRepo.CountByTypeIDs(ctx, typeIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	offset := (page - 1) * pageSize
+	items, err := s.lawRepo.ListByTypeIDs(ctx, typeIDs, offset, pageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return &PaginatedNewLawList{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      total,

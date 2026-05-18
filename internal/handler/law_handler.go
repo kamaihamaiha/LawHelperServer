@@ -79,6 +79,28 @@ func (h *LawHandler) GetHomeLaws(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *LawHandler) ListNewLaws(c *gin.Context) {
+	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "page 必须是整数")
+		return
+	}
+
+	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
+		return
+	}
+
+	result, err := h.lawService.ListNewLaws(c.Request.Context(), page, pageSize)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "查询新法速递列表失败")
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func (h *LawHandler) ListCommonLawsByType(c *gin.Context) {
 	typeID, err := strconv.Atoi(c.Param("typeId"))
 	if err != nil {
@@ -106,6 +128,72 @@ func (h *LawHandler) ListCommonLawsByType(c *gin.Context) {
 		}
 
 		response.Error(c, http.StatusInternalServerError, "查询常用法律列表失败")
+		return
+	}
+
+	response.Success(c, result)
+}
+
+func (h *LawHandler) ListAdminRegulations(c *gin.Context) {
+	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "page 必须是整数")
+		return
+	}
+
+	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
+		return
+	}
+
+	result, err := h.lawService.ListAdminRegulations(c.Request.Context(), page, pageSize)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "查询行政法规列表失败")
+		return
+	}
+
+	response.Success(c, result)
+}
+
+func (h *LawHandler) ListJudicialInterpretations(c *gin.Context) {
+	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "page 必须是整数")
+		return
+	}
+
+	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
+		return
+	}
+
+	result, err := h.lawService.ListJudicialInterpretations(c.Request.Context(), page, pageSize)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "查询司法解释列表失败")
+		return
+	}
+
+	response.Success(c, result)
+}
+
+func (h *LawHandler) ListLocalLaws(c *gin.Context) {
+	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "page 必须是整数")
+		return
+	}
+
+	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
+		return
+	}
+
+	result, err := h.lawService.ListLocalLaws(c.Request.Context(), page, pageSize)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "查询地方法律列表失败")
 		return
 	}
 

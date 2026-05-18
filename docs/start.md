@@ -89,6 +89,25 @@ curl http://localhost:8080/api/v1/home/laws
 - `lawCategories` — 法律概览。固定 8 个一级类型（宪法、宪法相关法、刑法、民法商法、诉讼与非诉讼法、行政法、经济法、社会法），`law_type_display` 走 `types` 表，`law_type` / `icon` / `uuid` 与移动端 mock 对齐。
 - `commonLaws` — 常用法律。7 个固定分组（婚姻家庭、商品买卖、劳动人事、交通法规、借贷担保、治安案件、刑事案件），`uuid / law_type / law_type_display / icon / type_id` 写死在 `service/home_service.go` 的 `commonLawDefs`；`count` 在每次请求时按各组的 `Keywords` 在 `laws_list.title` 上做 `LIKE %kw%` 聚合得到（粗匹配，分组之间允许重叠命中）。要调整命中口径直接改 `commonLawDefs[i].Keywords`。
 
+接口6: 新法速递分页列表：
+
+```shell
+curl "http://localhost:8080/api/v1/new-laws?page=1&pageSize=20"
+```
+
+筛选条件同 `newLawExpress`，但支持分页。返回 `page / pageSize / total / totalPages / items`，每个 item 包含 `versionId / title / lawTypeId / lawType / publishDate / effectDate / effectiveStatus / authorityName`。
+
+接口7: 某个常用法律类型下的法律列表（分页）：
+
+```shell
+curl "http://localhost:8080/api/v1/common-laws/1/laws?page=1&pageSize=20"
+```
+
+返回该常用法律类型下的法律列表，支持分页。返回结构：
+- `type` — 常用法律类型信息（`id / lawType / lawTypeDisplay / icon`）
+- `page / pageSize / total / totalPages` — 分页信息
+- `items` — 法律列表，每项含 `versionId / title / lawTypeId / lawType / publishDate / effectDate / effectiveStatus / authorityName`
+
 目录说明也保存在：
 
 `data/law_json/README.md`

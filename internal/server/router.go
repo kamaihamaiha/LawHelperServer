@@ -18,7 +18,11 @@ func NewRouter(lawHandler *handler.LawHandler) *gin.Engine {
 	api.GET("/laws/big-groups", lawHandler.ListBigGroupStats)
 	api.GET("/laws/:versionId/parsed", lawHandler.GetParsedLaw) //获取法律详情
 	api.GET("/home/laws", lawHandler.GetHomeLaws)               //首页法律接口: 返回不同类型的法律
+	api.GET("/new-laws", lawHandler.ListNewLaws)                //新法速递列表, 支持分页
 	api.GET("/common-laws/:typeId/laws", lawHandler.ListCommonLawsByType) //获取某个常用法律类型的法律list
+	api.GET("/admin-regulations", lawHandler.ListAdminRegulations)         //行政法规列表, 支持分页
+	api.GET("/judicial-interpretations", lawHandler.ListJudicialInterpretations) //司法解释列表, 支持分页
+	api.GET("/local-laws", lawHandler.ListLocalLaws)                     //地方法律列表, 支持分页
 
 	return router
 }
