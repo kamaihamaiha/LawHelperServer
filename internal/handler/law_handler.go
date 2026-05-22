@@ -43,19 +43,7 @@ func (h *LawHandler) ListLawsByType(c *gin.Context) {
 		return
 	}
 
-	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "page 必须是整数")
-		return
-	}
-
-	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
-		return
-	}
-
-	result, err := h.lawService.ListLawsByType(c.Request.Context(), typeID, page, pageSize)
+	result, err := h.lawService.ListLawsByType(c.Request.Context(), typeID)
 	if err != nil {
 		if errors.Is(err, service.ErrTypeNotFound) {
 			response.Error(c, http.StatusNotFound, "分类不存在")
@@ -108,19 +96,7 @@ func (h *LawHandler) ListCommonLawsByType(c *gin.Context) {
 		return
 	}
 
-	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "page 必须是整数")
-		return
-	}
-
-	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
-		return
-	}
-
-	result, err := h.lawService.ListCommonLawsByType(c.Request.Context(), typeID, page, pageSize)
+	result, err := h.lawService.ListCommonLawsByType(c.Request.Context(), typeID)
 	if err != nil {
 		if errors.Is(err, service.ErrCommonLawTypeNotFound) {
 			response.Error(c, http.StatusNotFound, "常用法律类型不存在")
@@ -135,19 +111,18 @@ func (h *LawHandler) ListCommonLawsByType(c *gin.Context) {
 }
 
 func (h *LawHandler) ListAdminRegulations(c *gin.Context) {
-	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "page 必须是整数")
-		return
+	var result any
+	var err error
+	if hasPaginationQuery(c) {
+		page, pageSize, message, ok := parsePaginationQuery(c, "20")
+		if !ok {
+			response.Error(c, http.StatusBadRequest, message)
+			return
+		}
+		result, err = h.lawService.ListAdminRegulationsPage(c.Request.Context(), page, pageSize)
+	} else {
+		result, err = h.lawService.ListAdminRegulations(c.Request.Context())
 	}
-
-	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
-		return
-	}
-
-	result, err := h.lawService.ListAdminRegulations(c.Request.Context(), page, pageSize)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "查询行政法规列表失败")
 		return
@@ -157,19 +132,18 @@ func (h *LawHandler) ListAdminRegulations(c *gin.Context) {
 }
 
 func (h *LawHandler) ListJudicialInterpretations(c *gin.Context) {
-	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "page 必须是整数")
-		return
+	var result any
+	var err error
+	if hasPaginationQuery(c) {
+		page, pageSize, message, ok := parsePaginationQuery(c, "20")
+		if !ok {
+			response.Error(c, http.StatusBadRequest, message)
+			return
+		}
+		result, err = h.lawService.ListJudicialInterpretationsPage(c.Request.Context(), page, pageSize)
+	} else {
+		result, err = h.lawService.ListJudicialInterpretations(c.Request.Context())
 	}
-
-	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
-		return
-	}
-
-	result, err := h.lawService.ListJudicialInterpretations(c.Request.Context(), page, pageSize)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "查询司法解释列表失败")
 		return
@@ -185,7 +159,7 @@ func (h *LawHandler) ListLocalLaws(c *gin.Context) {
 		return
 	}
 
-	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "20"))
+	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", "50"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "pageSize 必须是整数")
 		return
@@ -242,4 +216,22 @@ func defaultQuery(c *gin.Context, key, fallback string) string {
 	}
 
 	return fallback
+}
+
+func hasPaginationQuery(c *gin.Context) bool {
+	return strings.TrimSpace(c.Query("page")) != "" || strings.TrimSpace(c.Query("pageSize")) != ""
+}
+
+func parsePaginationQuery(c *gin.Context, defaultPageSize string) (int, int, string, bool) {
+	page, err := strconv.Atoi(defaultQuery(c, "page", "1"))
+	if err != nil {
+		return 0, 0, "page 必须是整数", false
+	}
+
+	pageSize, err := strconv.Atoi(defaultQuery(c, "pageSize", defaultPageSize))
+	if err != nil {
+		return 0, 0, "pageSize 必须是整数", false
+	}
+
+	return page, pageSize, "", true
 }

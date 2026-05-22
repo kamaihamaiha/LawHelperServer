@@ -47,28 +47,28 @@ func TestListTypePreviewsReturnsConcreteTypesWithAtMostTwentyItems(t *testing.T)
 		t.Fatalf("unexpected business code: got %d want 0", resp.Code)
 	}
 
-	if got := len(resp.Data); got != 3 {
-		t.Fatalf("unexpected preview type count: got %d want 3", got)
+	if got := len(resp.Data); got != 5 {
+		t.Fatalf("unexpected preview type count: got %d want 5", got)
 	}
 
-	typeIDs := []int{resp.Data[0].TypeID, resp.Data[1].TypeID, resp.Data[2].TypeID}
-	wantTypeIDs := []int{110, 120, 230}
+	typeIDs := []int{resp.Data[0].TypeID, resp.Data[1].TypeID, resp.Data[2].TypeID, resp.Data[3].TypeID, resp.Data[4].TypeID}
+	wantTypeIDs := []int{110, 120, 210, 230, 320}
 	assertIntSlice(t, typeIDs, wantTypeIDs)
 
-	if got := len(resp.Data[2].Items); got != 20 {
+	if got := len(resp.Data[3].Items); got != 20 {
 		t.Fatalf("unexpected preview item count for type 230: got %d want 20", got)
 	}
 
-	if got := resp.Data[2].Total; got != 22 {
+	if got := resp.Data[3].Total; got != 22 {
 		t.Fatalf("unexpected total for type 230: got %d want 22", got)
 	}
 
-	if got := resp.Data[2].Items[0].VersionID; got != "law-230-22" {
+	if got := resp.Data[3].Items[0].VersionID; got != "law-230-22" {
 		t.Fatalf("unexpected first preview item: got %s want %s", got, "law-230-22")
 	}
 }
 
-func TestListLawsByTypeSupportsPagination(t *testing.T) {
+func TestListLawsByTypeReturnsAllItems(t *testing.T) {
 	router := newTestRouter(t, t.TempDir())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/types/230/laws?page=2&pageSize=5", nil)
@@ -82,20 +82,20 @@ func TestListLawsByTypeSupportsPagination(t *testing.T) {
 	var resp envelope[service.PaginatedLawList]
 	decodeJSON(t, recorder.Body.Bytes(), &resp)
 
-	if resp.Data.Page != 2 || resp.Data.PageSize != 5 {
+	if resp.Data.Page != 1 || resp.Data.PageSize != 22 {
 		t.Fatalf("unexpected pagination metadata: got page=%d pageSize=%d", resp.Data.Page, resp.Data.PageSize)
 	}
 
-	if resp.Data.Total != 22 || resp.Data.TotalPages != 5 {
+	if resp.Data.Total != 22 || resp.Data.TotalPages != 1 {
 		t.Fatalf("unexpected total metadata: got total=%d totalPages=%d", resp.Data.Total, resp.Data.TotalPages)
 	}
 
-	if got := len(resp.Data.Items); got != 5 {
-		t.Fatalf("unexpected item count: got %d want 5", got)
+	if got := len(resp.Data.Items); got != 22 {
+		t.Fatalf("unexpected item count: got %d want 22", got)
 	}
 
-	if got := resp.Data.Items[0].VersionID; got != "law-230-17" {
-		t.Fatalf("unexpected first item on page 2: got %s want %s", got, "law-230-17")
+	if got := resp.Data.Items[0].VersionID; got != "law-230-22" {
+		t.Fatalf("unexpected first item: got %s want law-230-22", got)
 	}
 }
 
@@ -120,6 +120,118 @@ func TestListLawsByTypeSortsEmptyEffectDateLast(t *testing.T) {
 	}
 	wantOrder := []string{"law-120-b", "law-120-c", "law-120-a"}
 	assertStringSlice(t, gotOrder, wantOrder)
+}
+
+func TestListCommonLawsByTypeReturnsAllItems(t *testing.T) {
+	router := newTestRouter(t, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/common-laws/1/laws?page=2&pageSize=1", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	var resp envelope[service.PaginatedCommonLawList]
+	decodeJSON(t, recorder.Body.Bytes(), &resp)
+
+	if resp.Data.Page != 1 || resp.Data.PageSize != 2 || resp.Data.TotalPages != 1 {
+		t.Fatalf("unexpected pagination metadata: got page=%d pageSize=%d totalPages=%d", resp.Data.Page, resp.Data.PageSize, resp.Data.TotalPages)
+	}
+
+	if resp.Data.Total != 2 {
+		t.Fatalf("unexpected total: got %d want 2", resp.Data.Total)
+	}
+
+	if got := len(resp.Data.Items); got != 2 {
+		t.Fatalf("unexpected item count: got %d want 2", got)
+	}
+}
+
+func TestListLocalLawsDefaultsToFiftyItemsPerPage(t *testing.T) {
+	router := newTestRouter(t, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/local-laws", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	var resp envelope[service.PaginatedNewLawList]
+	decodeJSON(t, recorder.Body.Bytes(), &resp)
+
+	if resp.Data.Page != 1 || resp.Data.PageSize != 50 {
+		t.Fatalf("unexpected pagination metadata: got page=%d pageSize=%d", resp.Data.Page, resp.Data.PageSize)
+	}
+
+	if resp.Data.Total != 22 || resp.Data.TotalPages != 1 {
+		t.Fatalf("unexpected total metadata: got total=%d totalPages=%d", resp.Data.Total, resp.Data.TotalPages)
+	}
+
+	if got := len(resp.Data.Items); got != 22 {
+		t.Fatalf("unexpected item count: got %d want 22", got)
+	}
+}
+
+func TestListAdminRegulationsReturnsAllItems(t *testing.T) {
+	router := newTestRouter(t, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin-regulations", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	var resp envelope[service.PaginatedNewLawList]
+	decodeJSON(t, recorder.Body.Bytes(), &resp)
+
+	if resp.Data.Page != 1 || resp.Data.PageSize != 3 || resp.Data.TotalPages != 1 {
+		t.Fatalf("unexpected pagination metadata: got page=%d pageSize=%d totalPages=%d", resp.Data.Page, resp.Data.PageSize, resp.Data.TotalPages)
+	}
+
+	if resp.Data.Total != 3 {
+		t.Fatalf("unexpected total: got %d want 3", resp.Data.Total)
+	}
+
+	if got := len(resp.Data.Items); got != 3 {
+		t.Fatalf("unexpected item count: got %d want 3", got)
+	}
+
+	if got := resp.Data.Items[0].VersionID; got != "admin-03" {
+		t.Fatalf("unexpected first item: got %s want admin-03", got)
+	}
+}
+
+func TestListAdminRegulationsSupportsPreviewPagination(t *testing.T) {
+	router := newTestRouter(t, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin-regulations?page=1&pageSize=2", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	var resp envelope[service.PaginatedNewLawList]
+	decodeJSON(t, recorder.Body.Bytes(), &resp)
+
+	if resp.Data.Page != 1 || resp.Data.PageSize != 2 || resp.Data.TotalPages != 2 {
+		t.Fatalf("unexpected pagination metadata: got page=%d pageSize=%d totalPages=%d", resp.Data.Page, resp.Data.PageSize, resp.Data.TotalPages)
+	}
+
+	if resp.Data.Total != 3 {
+		t.Fatalf("unexpected total: got %d want 3", resp.Data.Total)
+	}
+
+	if got := len(resp.Data.Items); got != 2 {
+		t.Fatalf("unexpected item count: got %d want 2", got)
+	}
 }
 
 func TestGetParsedLawReturnsJSONWhenFileExists(t *testing.T) {
@@ -404,8 +516,10 @@ func createTestSQLiteDatabase(t *testing.T) string {
 	insertType(t, db, 150, "社会法", intPtr(102))
 	insertType(t, db, 160, "刑法", intPtr(102))
 	insertType(t, db, 170, "诉讼与非诉讼法", intPtr(102))
+	insertType(t, db, 210, "行政法规", nil)
 	insertType(t, db, 222, "地方法规", nil)
 	insertType(t, db, 230, "地方性法规", intPtr(222))
+	insertType(t, db, 320, "司法解释", nil)
 
 	insertLaw(t, db, "law-parsed-1", "解析文件法律", 110, "法律", "2024-01-02", "2024-01-03", 1, "全国人大")
 	insertLaw(t, db, "law-parsed-missing", "缺失解析文件法律", 110, "法律", "2024-01-01", "2024-01-02", 1, "全国人大")
@@ -423,6 +537,15 @@ func createTestSQLiteDatabase(t *testing.T) string {
 		insertLaw(t, db, versionID, title, 230, "地方性法规", date, date, 1, "地方人大")
 	}
 
+	for i := 1; i <= 3; i++ {
+		date := fmt.Sprintf("2024-04-%02d", i)
+		insertLaw(t, db, fmt.Sprintf("admin-%02d", i), fmt.Sprintf("行政法规 %02d", i), 210, "行政法规", date, date, 1, "国务院")
+	}
+	for i := 1; i <= 3; i++ {
+		date := fmt.Sprintf("2024-05-%02d", i)
+		insertLaw(t, db, fmt.Sprintf("judicial-%02d", i), fmt.Sprintf("司法解释 %02d", i), 320, "司法解释", date, date, 1, "最高人民法院")
+	}
+
 	now := time.Now()
 	today := now.Format("2006-01-02")
 	future := now.AddDate(0, 1, 0).Format("2006-01-02")
@@ -430,6 +553,7 @@ func createTestSQLiteDatabase(t *testing.T) string {
 
 	// 给「常用法律」的关键字统计准备命中数据；挂在 110 上避免影响其它分类的排序/计数断言
 	insertLaw(t, db, "law-marriage-1", "中华人民共和国婚姻法", 110, "法律", "2001-04-28", "2001-04-28", 1, "全国人大")
+	insertLaw(t, db, "law-marriage-2", "中华人民共和国婚姻登记条例", 110, "法律", "2003-08-08", "2003-10-01", 1, "国务院")
 	insertLaw(t, db, "law-labor-1", "中华人民共和国劳动合同法", 110, "法律", "2007-06-29", "2008-01-01", 1, "全国人大")
 
 	return dbPath

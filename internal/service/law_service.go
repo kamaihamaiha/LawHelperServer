@@ -19,16 +19,16 @@ const (
 )
 
 var (
-	ErrTypeNotFound       = errors.New("type not found")
-	ErrLawNotFound        = errors.New("law not found")
+	ErrTypeNotFound          = errors.New("type not found")
+	ErrLawNotFound           = errors.New("law not found")
 	ErrCommonLawTypeNotFound = errors.New("common law type not found")
 )
 
 type LawService struct {
-	typeRepo       *repository.TypeRepository
-	lawRepo        *repository.LawRepository
-	parsedLawRepo  *repository.ParsedLawRepository
-	commonLawRepo  *repository.CommonLawRepository
+	typeRepo      *repository.TypeRepository
+	lawRepo       *repository.LawRepository
+	parsedLawRepo *repository.ParsedLawRepository
+	commonLawRepo *repository.CommonLawRepository
 }
 
 type TypePreview struct {
@@ -62,12 +62,12 @@ type CommonLawTypeInfo struct {
 }
 
 type PaginatedCommonLawList struct {
-	Type       CommonLawTypeInfo   `json:"type"`
-	Page       int                 `json:"page"`
-	PageSize   int                 `json:"pageSize"`
-	Total      int64               `json:"total"`
-	TotalPages int                 `json:"totalPages"`
-	Items      []model.LawSummary  `json:"items"`
+	Type       CommonLawTypeInfo  `json:"type"`
+	Page       int                `json:"page"`
+	PageSize   int                `json:"pageSize"`
+	Total      int64              `json:"total"`
+	TotalPages int                `json:"totalPages"`
+	Items      []model.LawSummary `json:"items"`
 }
 
 type PaginatedNewLawList struct {
@@ -97,10 +97,10 @@ type ParsedLawDetail struct {
 
 func NewLawService(typeRepo *repository.TypeRepository, lawRepo *repository.LawRepository, parsedLawRepo *repository.ParsedLawRepository, commonLawRepo *repository.CommonLawRepository) *LawService {
 	return &LawService{
-		typeRepo:       typeRepo,
-		lawRepo:        lawRepo,
-		parsedLawRepo:  parsedLawRepo,
-		commonLawRepo:  commonLawRepo,
+		typeRepo:      typeRepo,
+		lawRepo:       lawRepo,
+		parsedLawRepo: parsedLawRepo,
+		commonLawRepo: commonLawRepo,
 	}
 }
 
@@ -129,7 +129,7 @@ func (s *LawService) ListTypePreviews(ctx context.Context) ([]TypePreview, error
 	return previews, nil
 }
 
-func (s *LawService) ListLawsByType(ctx context.Context, typeID, page, pageSize int) (*PaginatedLawList, error) {
+func (s *LawService) ListLawsByType(ctx context.Context, typeID int) (*PaginatedLawList, error) {
 	lawType, err := s.typeRepo.GetByID(ctx, typeID)
 	if err != nil {
 		return nil, err
@@ -138,26 +138,24 @@ func (s *LawService) ListLawsByType(ctx context.Context, typeID, page, pageSize 
 		return nil, ErrTypeNotFound
 	}
 
-	page, pageSize = normalizePagination(page, pageSize)
-
 	total, err := s.lawRepo.CountByType(ctx, typeID)
 	if err != nil {
 		return nil, err
 	}
 
-	offset := (page - 1) * pageSize
-	items, err := s.lawRepo.ListByType(ctx, typeID, offset, pageSize)
+	items, err := s.lawRepo.ListAllByType(ctx, typeID)
 	if err != nil {
 		return nil, err
 	}
 
+	pageSize := len(items)
 	return &PaginatedLawList{
 		Type: TypeInfo{
 			ID:       lawType.ID,
 			Name:     lawType.Name,
 			ParentID: lawType.ParentID,
 		},
-		Page:       page,
+		Page:       defaultPage,
 		PageSize:   pageSize,
 		Total:      total,
 		TotalPages: totalPages(total, pageSize),
@@ -165,7 +163,7 @@ func (s *LawService) ListLawsByType(ctx context.Context, typeID, page, pageSize 
 	}, nil
 }
 
-func (s *LawService) ListCommonLawsByType(ctx context.Context, typeID, page, pageSize int) (*PaginatedCommonLawList, error) {
+func (s *LawService) ListCommonLawsByType(ctx context.Context, typeID int) (*PaginatedCommonLawList, error) {
 	commonLawType, err := s.commonLawRepo.GetTypeByID(ctx, typeID)
 	if err != nil {
 		return nil, err
@@ -174,19 +172,17 @@ func (s *LawService) ListCommonLawsByType(ctx context.Context, typeID, page, pag
 		return nil, ErrCommonLawTypeNotFound
 	}
 
-	page, pageSize = normalizePagination(page, pageSize)
-
 	total, err := s.commonLawRepo.CountByTypeID(ctx, typeID)
 	if err != nil {
 		return nil, err
 	}
 
-	offset := (page - 1) * pageSize
-	items, err := s.commonLawRepo.ListLawsByTypeID(ctx, typeID, offset, pageSize)
+	items, err := s.commonLawRepo.ListAllLawsByTypeID(ctx, typeID)
 	if err != nil {
 		return nil, err
 	}
 
+	pageSize := len(items)
 	return &PaginatedCommonLawList{
 		Type: CommonLawTypeInfo{
 			ID:             commonLawType.ID,
@@ -194,7 +190,7 @@ func (s *LawService) ListCommonLawsByType(ctx context.Context, typeID, page, pag
 			LawTypeDisplay: commonLawType.LawTypeDisplay,
 			Icon:           commonLawType.Icon,
 		},
-		Page:       page,
+		Page:       defaultPage,
 		PageSize:   pageSize,
 		Total:      total,
 		TotalPages: totalPages(total, pageSize),
@@ -229,11 +225,19 @@ func (s *LawService) ListNewLaws(ctx context.Context, page, pageSize int) (*Pagi
 	}, nil
 }
 
-func (s *LawService) ListAdminRegulations(ctx context.Context, page, pageSize int) (*PaginatedNewLawList, error) {
+func (s *LawService) ListAdminRegulations(ctx context.Context) (*PaginatedNewLawList, error) {
+	return s.listAllLawsByTypeIDs(ctx, AdminRegulationTypeIDs)
+}
+
+func (s *LawService) ListAdminRegulationsPage(ctx context.Context, page, pageSize int) (*PaginatedNewLawList, error) {
 	return s.listLawsByTypeIDs(ctx, AdminRegulationTypeIDs, page, pageSize)
 }
 
-func (s *LawService) ListJudicialInterpretations(ctx context.Context, page, pageSize int) (*PaginatedNewLawList, error) {
+func (s *LawService) ListJudicialInterpretations(ctx context.Context) (*PaginatedNewLawList, error) {
+	return s.listAllLawsByTypeIDs(ctx, JudicialInterpretationTypeIDs)
+}
+
+func (s *LawService) ListJudicialInterpretationsPage(ctx context.Context, page, pageSize int) (*PaginatedNewLawList, error) {
 	return s.listLawsByTypeIDs(ctx, JudicialInterpretationTypeIDs, page, pageSize)
 }
 
@@ -257,6 +261,27 @@ func (s *LawService) listLawsByTypeIDs(ctx context.Context, typeIDs []int, page,
 
 	return &PaginatedNewLawList{
 		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages(total, pageSize),
+		Items:      items,
+	}, nil
+}
+
+func (s *LawService) listAllLawsByTypeIDs(ctx context.Context, typeIDs []int) (*PaginatedNewLawList, error) {
+	total, err := s.lawRepo.CountByTypeIDs(ctx, typeIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	items, err := s.lawRepo.ListAllByTypeIDs(ctx, typeIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	pageSize := len(items)
+	return &PaginatedNewLawList{
+		Page:       defaultPage,
 		PageSize:   pageSize,
 		Total:      total,
 		TotalPages: totalPages(total, pageSize),

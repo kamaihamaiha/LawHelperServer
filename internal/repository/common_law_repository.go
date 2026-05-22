@@ -139,6 +139,19 @@ func (r *CommonLawRepository) ListLawsByTypeID(ctx context.Context, typeID, offs
 	return laws, err
 }
 
+// ListAllLawsByTypeID 根据类型ID查询全部法律列表
+func (r *CommonLawRepository) ListAllLawsByTypeID(ctx context.Context, typeID int) ([]model.LawSummary, error) {
+	var laws []model.LawSummary
+	err := r.db.WithContext(ctx).
+		Table("common_laws c").
+		Select("l.versionId, l.title, l.lawTypeId, l.lawType, l.publishDate, l.effectDate, l.effectiveStatus, l.authorityName").
+		Joins("JOIN laws_list l ON c.law_id = l.versionId").
+		Where("c.common_law_type_id = ?", typeID).
+		Order(lawListOrder).
+		Find(&laws).Error
+	return laws, err
+}
+
 // GetTypeByID 根据ID获取类型
 func (r *CommonLawRepository) GetTypeByID(ctx context.Context, id int) (*model.CommonLawType, error) {
 	var t model.CommonLawType
