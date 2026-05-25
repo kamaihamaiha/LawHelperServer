@@ -262,6 +262,95 @@ func TestGetParsedLawReturnsJSONWhenFileExists(t *testing.T) {
 	}
 }
 
+func TestSearchLawsSupportsCombinedConditions(t *testing.T) {
+	router := newTestRouter(t, t.TempDir())
+
+	body := bytes.NewBufferString(`{
+		"scope":"laws",
+		"query":"婚姻",
+		"textMode":"title",
+		"authorityNames":["全国人大"],
+		"effectiveStatuses":[1],
+		"publishDateStart":"2001-01-01",
+		"publishDateEnd":"2002-12-31",
+		"effectDateStart":"2001-01-01",
+		"effectDateEnd":"2002-12-31",
+		"page":1,
+		"pageSize":10
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/laws/search", body)
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	var resp envelope[service.PaginatedNewLawList]
+	decodeJSON(t, recorder.Body.Bytes(), &resp)
+
+	if resp.Data.Total != 1 || resp.Data.TotalPages != 1 {
+		t.Fatalf("unexpected search metadata: got total=%d totalPages=%d", resp.Data.Total, resp.Data.TotalPages)
+	}
+	if got := len(resp.Data.Items); got != 1 {
+		t.Fatalf("unexpected search item count: got %d want 1", got)
+	}
+	if got := resp.Data.Items[0].VersionID; got != "law-marriage-1" {
+		t.Fatalf("unexpected search result: got %s want law-marriage-1", got)
+	}
+}
+
+func TestSearchLawsSupportsBodySearch(t *testing.T) {
+	detailDir := t.TempDir()
+	router := newTestRouter(t, detailDir)
+
+	dbPath := createTestSQLiteDatabase(t)
+	db, err := database.OpenSQLiteCreate(dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec(`UPDATE laws_list SET detailJson = ? WHERE versionId = ?`, `{"content":"这是一部关于环境保护的正文内容"}`, "law-120-b").Error; err != nil {
+		t.Fatalf("update detailJson: %v", err)
+	}
+	typeRepo := repository.NewTypeRepository(db)
+	lawRepo := repository.NewLawRepository(db)
+	parsedLawRepo := repository.NewParsedLawRepository(detailDir)
+	commonLawRepo := repository.NewCommonLawRepository(db)
+	syncService := service.NewSyncService(commonLawRepo, lawRepo)
+	if err := syncService.SyncCommonLaws(context.Background()); err != nil {
+		t.Fatalf("sync common laws: %v", err)
+	}
+	lawService := service.NewLawService(typeRepo, lawRepo, parsedLawRepo, commonLawRepo)
+	router = server.NewRouter(handler.NewLawHandler(lawService))
+
+	body := bytes.NewBufferString(`{
+		"scope":"laws",
+		"query":"环境保护",
+		"textMode":"body",
+		"page":1,
+		"pageSize":10
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/laws/search", body)
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	var resp envelope[service.PaginatedNewLawList]
+	decodeJSON(t, recorder.Body.Bytes(), &resp)
+
+	if resp.Data.Total != 1 {
+		t.Fatalf("unexpected search total: got %d want 1", resp.Data.Total)
+	}
+	if got := resp.Data.Items[0].VersionID; got != "law-120-b" {
+		t.Fatalf("unexpected body search result: got %s want law-120-b", got)
+	}
+}
+
 func TestGetParsedLawFallsBackToLegacyFlatPath(t *testing.T) {
 	detailDir := t.TempDir()
 	writeFlatJSONFile(t, detailDir, "law-parsed-1", []byte(`{"title":"旧目录解析版法律"}`))

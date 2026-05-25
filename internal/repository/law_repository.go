@@ -22,8 +22,52 @@ type LawRepository struct {
 	db *gorm.DB
 }
 
+type LawSearchFilter struct {
+	// repository 层只关心已经标准化后的过滤条件
+	Scope             string
+	Query             string
+	TextMode          string
+	AuthorityNames    []string
+	EffectiveStatuses []int
+	PublishDateStart  string
+	PublishDateEnd    string
+	EffectDateStart   string
+	EffectDateEnd     string
+	Offset            int
+	Limit             int
+}
+
 func NewLawRepository(db *gorm.DB) *LawRepository {
 	return &LawRepository{db: db}
+}
+
+func (r *LawRepository) SearchLaws(ctx context.Context, filter LawSearchFilter) ([]model.LawSummary, error) {
+	var laws []model.LawSummary
+
+	// 搜索结果仍然返回 LawSummary，方便直接复用现有列表卡片和详情跳转
+	query := r.buildSearchQuery(ctx, filter).
+		Select("l.versionId, l.title, l.lawTypeId, l.lawType, l.publishDate, l.effectDate, l.effectiveStatus, l.authorityName").
+		Order(searchLawListOrder)
+	if filter.Offset > 0 {
+		query = query.Offset(filter.Offset)
+	}
+	if filter.Limit > 0 {
+		query = query.Limit(filter.Limit)
+	}
+
+	if err := query.Find(&laws).Error; err != nil {
+		return nil, err
+	}
+
+	return laws, nil
+}
+
+func (r *LawRepository) CountSearchLaws(ctx context.Context, filter LawSearchFilter) (int64, error) {
+	var total int64
+	if err := r.buildSearchQuery(ctx, filter).Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func (r *LawRepository) ListByType(ctx context.Context, typeID, offset, limit int) ([]model.LawSummary, error) {
@@ -372,4 +416,94 @@ func (r *LawRepository) FindIDsByTitleKeywords(ctx context.Context, keywords []s
 	}
 
 	return ids, nil
+}
+
+const searchLawListOrder = `
+CASE WHEN l.effectDate IS NULL OR TRIM(l.effectDate) = '' THEN 1 ELSE 0 END ASC,
+l.effectDate DESC,
+CASE WHEN l.publishDate IS NULL OR TRIM(l.publishDate) = '' THEN 1 ELSE 0 END ASC,
+l.publishDate DESC,
+l.versionId DESC
+`
+
+func (r *LawRepository) buildSearchQuery(ctx context.Context, filter LawSearchFilter) *gorm.DB {
+	query := r.db.WithContext(ctx).
+		Table("laws_list AS l")
+
+	// scope 复用 types/parent types 分组逻辑，和首页 tab 语义保持一致
+	switch strings.TrimSpace(filter.Scope) {
+	case "laws":
+		query = query.
+			Joins("JOIN types t ON t.id = l.lawTypeId").
+			Joins("LEFT JOIN types parent_t ON t.parent_id = parent_t.id").
+			Where("COALESCE(parent_t.id, t.id) IN ?", []int{100, 101, 102})
+	case "admin_regulations":
+		query = query.
+			Joins("JOIN types t ON t.id = l.lawTypeId").
+			Joins("LEFT JOIN types parent_t ON t.parent_id = parent_t.id").
+			Where("COALESCE(parent_t.id, t.id) IN ?", []int{210})
+	case "judicial_interpretations":
+		query = query.
+			Joins("JOIN types t ON t.id = l.lawTypeId").
+			Joins("LEFT JOIN types parent_t ON t.parent_id = parent_t.id").
+			Where("COALESCE(parent_t.id, t.id) IN ?", []int{320, 330, 340, 350})
+	case "local_laws":
+		query = query.
+			Joins("JOIN types t ON t.id = l.lawTypeId").
+			Joins("LEFT JOIN types parent_t ON t.parent_id = parent_t.id").
+			Where("COALESCE(parent_t.id, t.id) IN ?", []int{222})
+	}
+
+	if trimmedQuery := strings.TrimSpace(filter.Query); trimmedQuery != "" {
+		likeQuery := "%" + trimmedQuery + "%"
+		// 正文搜索暂时直接用 detailJson LIKE，先满足接口能力，后面再视数据量做索引优化
+		switch strings.TrimSpace(filter.TextMode) {
+		case "body":
+			query = query.Where("TRIM(COALESCE(l.detailJson, '')) != '' AND l.detailJson LIKE ?", likeQuery)
+		case "title_and_body":
+			query = query.Where(
+				"l.title LIKE ? AND TRIM(COALESCE(l.detailJson, '')) != '' AND l.detailJson LIKE ?",
+				likeQuery,
+				likeQuery,
+			)
+		case "title_or_body":
+			query = query.Where(
+				"(l.title LIKE ?) OR (TRIM(COALESCE(l.detailJson, '')) != '' AND l.detailJson LIKE ?)",
+				likeQuery,
+				likeQuery,
+			)
+		default:
+			query = query.Where("l.title LIKE ?", likeQuery)
+		}
+	}
+
+	if len(filter.AuthorityNames) > 0 {
+		query = query.Where("l.authorityName IN ?", filter.AuthorityNames)
+	}
+	if len(filter.EffectiveStatuses) > 0 {
+		query = query.Where("l.effectiveStatus IN ?", filter.EffectiveStatuses)
+	}
+
+	query = applyDateRangeFilter(query, "l.publishDate", filter.PublishDateStart, filter.PublishDateEnd)
+	query = applyDateRangeFilter(query, "l.effectDate", filter.EffectDateStart, filter.EffectDateEnd)
+
+	return query
+}
+
+func applyDateRangeFilter(query *gorm.DB, column, start, end string) *gorm.DB {
+	start = strings.TrimSpace(start)
+	end = strings.TrimSpace(end)
+	if start == "" && end == "" {
+		return query
+	}
+
+	// 只要设置了日期范围，就要求该字段本身非空，避免空日期也被误命中
+	query = query.Where("TRIM(COALESCE("+column+", '')) != ''")
+	if start != "" {
+		query = query.Where(column+" >= ?", start)
+	}
+	if end != "" {
+		query = query.Where(column+" <= ?", end)
+	}
+	return query
 }

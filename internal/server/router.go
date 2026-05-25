@@ -16,6 +16,7 @@ func NewRouter(lawHandler *handler.LawHandler) *gin.Engine {
 	api.GET("/types/previews", lawHandler.ListTypePreviews)
 	api.GET("/types/:typeId/laws", lawHandler.ListLawsByType) //获取某个分类的全部法律list
 	api.GET("/laws/big-groups", lawHandler.ListBigGroupStats)
+	api.POST("/laws/search", lawHandler.SearchLaws)
 	api.GET("/laws/:versionId/parsed", lawHandler.GetParsedLaw)                  //获取法律详情
 	api.GET("/home/laws", lawHandler.GetHomeLaws)                                //首页法律接口: 返回不同类型的法律
 	api.GET("/new-laws", lawHandler.ListNewLaws)                                 //新法速递列表, 支持分页

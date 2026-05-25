@@ -78,6 +78,35 @@ type PaginatedNewLawList struct {
 	Items      []model.LawSummary `json:"items"`
 }
 
+const (
+	SearchScopeLaws                    = "laws"
+	SearchScopeAdminRegulations        = "admin_regulations"
+	SearchScopeJudicialInterpretations = "judicial_interpretations"
+	SearchScopeLocalLaws               = "local_laws"
+)
+
+const (
+	SearchTextModeTitle        = "title"
+	SearchTextModeBody         = "body"
+	SearchTextModeTitleAndBody = "title_and_body"
+	SearchTextModeTitleOrBody  = "title_or_body"
+)
+
+type LawSearchRequest struct {
+	// 这份结构既是 handler -> service 的输入，也限定了 repository 可见的搜索维度
+	Scope             string   `json:"scope"`
+	Query             string   `json:"query"`
+	TextMode          string   `json:"textMode"`
+	AuthorityNames    []string `json:"authorityNames"`
+	EffectiveStatuses []int    `json:"effectiveStatuses"`
+	PublishDateStart  string   `json:"publishDateStart"`
+	PublishDateEnd    string   `json:"publishDateEnd"`
+	EffectDateStart   string   `json:"effectDateStart"`
+	EffectDateEnd     string   `json:"effectDateEnd"`
+	Page              int      `json:"page"`
+	PageSize          int      `json:"pageSize"`
+}
+
 // 类型ID分组
 var (
 	// 行政法规类型ID
@@ -322,6 +351,60 @@ func (s *LawService) GetParsedLaw(ctx context.Context, versionID string) (*Parse
 		Title:     lawMeta.Title,
 		Available: true,
 		Content:   &raw,
+	}, nil
+}
+
+func (s *LawService) SearchLaws(ctx context.Context, req LawSearchRequest) (*PaginatedNewLawList, error) {
+	page, pageSize := normalizePagination(req.Page, req.PageSize)
+	req.Page = page
+	req.PageSize = pageSize
+	req.Scope = strings.TrimSpace(req.Scope)
+	req.Query = strings.TrimSpace(req.Query)
+	req.TextMode = strings.TrimSpace(req.TextMode)
+	if req.TextMode == "" {
+		req.TextMode = SearchTextModeTitle
+	}
+
+	// 先 count 再查列表，保持和现有分页接口一致的返回结构
+	total, err := s.lawRepo.CountSearchLaws(ctx, repository.LawSearchFilter{
+		Scope:             req.Scope,
+		Query:             req.Query,
+		TextMode:          req.TextMode,
+		AuthorityNames:    req.AuthorityNames,
+		EffectiveStatuses: req.EffectiveStatuses,
+		PublishDateStart:  req.PublishDateStart,
+		PublishDateEnd:    req.PublishDateEnd,
+		EffectDateStart:   req.EffectDateStart,
+		EffectDateEnd:     req.EffectDateEnd,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	offset := (page - 1) * pageSize
+	items, err := s.lawRepo.SearchLaws(ctx, repository.LawSearchFilter{
+		Scope:             req.Scope,
+		Query:             req.Query,
+		TextMode:          req.TextMode,
+		AuthorityNames:    req.AuthorityNames,
+		EffectiveStatuses: req.EffectiveStatuses,
+		PublishDateStart:  req.PublishDateStart,
+		PublishDateEnd:    req.PublishDateEnd,
+		EffectDateStart:   req.EffectDateStart,
+		EffectDateEnd:     req.EffectDateEnd,
+		Offset:            offset,
+		Limit:             pageSize,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &PaginatedNewLawList{
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages(total, pageSize),
+		Items:      items,
 	}, nil
 }
 
