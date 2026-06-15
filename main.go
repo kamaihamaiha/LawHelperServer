@@ -28,14 +28,18 @@ func main() {
 	lawRepo := repository.NewLawRepository(db)
 	parsedLawRepo := repository.NewParsedLawRepository(cfg.LawDetailJSONDir)
 	commonLawRepo := repository.NewCommonLawRepository(db)
+	localAuthorityRepo := repository.NewLocalAuthorityRepository(db)
 
-	// 启动时同步常用法律数据
-	syncService := service.NewSyncService(commonLawRepo, lawRepo)
+	// 启动时同步常用法律数据和地方法律机关数据
+	syncService := service.NewSyncService(commonLawRepo, lawRepo, localAuthorityRepo)
 	if err := syncService.SyncCommonLaws(context.Background()); err != nil {
 		log.Printf("Warning: sync common laws failed: %v", err)
 	}
+	if err := syncService.SyncLocalAuthorities(context.Background()); err != nil {
+		log.Printf("Warning: sync local authorities failed: %v", err)
+	}
 
-	lawService := service.NewLawService(typeRepo, lawRepo, parsedLawRepo, commonLawRepo)
+	lawService := service.NewLawService(typeRepo, lawRepo, parsedLawRepo, commonLawRepo, localAuthorityRepo)
 	lawHandler := handler.NewLawHandler(lawService)
 	router := server.NewRouter(lawHandler)
 

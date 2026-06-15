@@ -9,16 +9,18 @@ import (
 	"LawHelperServer/internal/repository"
 )
 
-// SyncService 负责常用法律数据的同步
+// SyncService 负责常用法律数据和地方法律机关数据的同步
 type SyncService struct {
-	commonLawRepo *repository.CommonLawRepository
-	lawRepo       *repository.LawRepository
+	commonLawRepo      *repository.CommonLawRepository
+	lawRepo            *repository.LawRepository
+	localAuthorityRepo *repository.LocalAuthorityRepository
 }
 
-func NewSyncService(commonLawRepo *repository.CommonLawRepository, lawRepo *repository.LawRepository) *SyncService {
+func NewSyncService(commonLawRepo *repository.CommonLawRepository, lawRepo *repository.LawRepository, localAuthorityRepo *repository.LocalAuthorityRepository) *SyncService {
 	return &SyncService{
-		commonLawRepo: commonLawRepo,
-		lawRepo:       lawRepo,
+		commonLawRepo:      commonLawRepo,
+		lawRepo:            lawRepo,
+		localAuthorityRepo: localAuthorityRepo,
 	}
 }
 
@@ -136,5 +138,56 @@ func (s *SyncService) syncMappings(ctx context.Context) error {
 		}
 	}
 
+	return nil
+}
+
+// SyncLocalAuthorities 同步地方法律制定机关数据（启动时调用）
+// 从 laws_list 提取地方法律的 authorityName，按省份和城市归属写入 local_authority_list 表
+func (s *SyncService) SyncLocalAuthorities(ctx context.Context) error {
+	// 1. 检查表是否存在，不存在则创建
+	exists, err := s.localAuthorityRepo.TableExists(ctx)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if err := s.localAuthorityRepo.CreateTable(ctx); err != nil {
+			return err
+		}
+		log.Println("Created local_authority_list table")
+	}
+
+	// 2. 如果已有数据则跳过
+	hasData, err := s.localAuthorityRepo.HasData(ctx)
+	if err != nil {
+		return err
+	}
+	if hasData {
+		return nil
+	}
+
+	// 3. 从 laws_list 聚合地方法律的制定机关数据
+	rows, err := s.localAuthorityRepo.QueryAuthorityStats(ctx, LocalLawTypeIDs)
+	if err != nil {
+		return err
+	}
+
+	// 4. 对每个 authorityName 解析省/市归属
+	authorities := make([]model.LocalAuthority, 0, len(rows))
+	for _, row := range rows {
+		province, city := resolveLocation(row.AuthorityName)
+		authorities = append(authorities, model.LocalAuthority{
+			AuthorityName: row.AuthorityName,
+			Province:      province,
+			City:          city,
+			LawCount:      row.LawCount,
+		})
+	}
+
+	// 5. 写入表
+	if err := s.localAuthorityRepo.ReplaceAll(ctx, authorities); err != nil {
+		return err
+	}
+
+	log.Printf("Synced %d local authorities", len(authorities))
 	return nil
 }

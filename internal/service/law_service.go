@@ -25,10 +25,11 @@ var (
 )
 
 type LawService struct {
-	typeRepo      *repository.TypeRepository
-	lawRepo       *repository.LawRepository
-	parsedLawRepo *repository.ParsedLawRepository
-	commonLawRepo *repository.CommonLawRepository
+	typeRepo           *repository.TypeRepository
+	lawRepo            *repository.LawRepository
+	parsedLawRepo      *repository.ParsedLawRepository
+	commonLawRepo      *repository.CommonLawRepository
+	localAuthorityRepo *repository.LocalAuthorityRepository
 }
 
 type TypePreview struct {
@@ -79,10 +80,10 @@ type PaginatedNewLawList struct {
 }
 
 const (
-	SearchScopeLaws                    = "laws"
-	SearchScopeAdminRegulations        = "admin_regulations"
-	SearchScopeJudicialInterpretations = "judicial_interpretations"
-	SearchScopeLocalLaws               = "local_laws"
+	SearchScopeLaws                    = "laws"                     //法律
+	SearchScopeAdminRegulations        = "admin_regulations"        //行政法规
+	SearchScopeJudicialInterpretations = "judicial_interpretations" //司法解释
+	SearchScopeLocalLaws               = "local_laws"               //地方法律
 )
 
 const (
@@ -124,12 +125,13 @@ type ParsedLawDetail struct {
 	Content   *json.RawMessage `json:"content"`
 }
 
-func NewLawService(typeRepo *repository.TypeRepository, lawRepo *repository.LawRepository, parsedLawRepo *repository.ParsedLawRepository, commonLawRepo *repository.CommonLawRepository) *LawService {
+func NewLawService(typeRepo *repository.TypeRepository, lawRepo *repository.LawRepository, parsedLawRepo *repository.ParsedLawRepository, commonLawRepo *repository.CommonLawRepository, localAuthorityRepo *repository.LocalAuthorityRepository) *LawService {
 	return &LawService{
-		typeRepo:      typeRepo,
-		lawRepo:       lawRepo,
-		parsedLawRepo: parsedLawRepo,
-		commonLawRepo: commonLawRepo,
+		typeRepo:           typeRepo,
+		lawRepo:            lawRepo,
+		parsedLawRepo:      parsedLawRepo,
+		commonLawRepo:      commonLawRepo,
+		localAuthorityRepo: localAuthorityRepo,
 	}
 }
 
@@ -429,4 +431,9 @@ func totalPages(total int64, pageSize int) int {
 	}
 
 	return int((total + int64(pageSize) - 1) / int64(pageSize))
+}
+
+// ListLocalAuthorities 返回全部地方法律制定机关（按省/市分组），供客户端三级联动选择
+func (s *LawService) ListLocalAuthorities(ctx context.Context) ([]model.LocalAuthority, error) {
+	return s.localAuthorityRepo.ListAll(ctx)
 }

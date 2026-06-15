@@ -185,6 +185,17 @@ func (h *LawHandler) ListBigGroupStats(c *gin.Context) {
 	response.Success(c, stats)
 }
 
+// ListLocalAuthorities 返回地方法律全部制定机关，供客户端 省→市→机关 三级联动筛选
+func (h *LawHandler) ListLocalAuthorities(c *gin.Context) {
+	authorities, err := h.lawService.ListLocalAuthorities(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "查询地方法律制定机关失败")
+		return
+	}
+
+	response.Success(c, authorities)
+}
+
 func (h *LawHandler) GetParsedLaw(c *gin.Context) {
 	versionID := strings.TrimSpace(c.Param("versionId"))
 	if versionID == "" {

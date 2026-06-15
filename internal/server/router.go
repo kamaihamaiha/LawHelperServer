@@ -24,6 +24,7 @@ func NewRouter(lawHandler *handler.LawHandler) *gin.Engine {
 	api.GET("/admin-regulations", lawHandler.ListAdminRegulations)               //行政法规列表, 一次性返回全部简介
 	api.GET("/judicial-interpretations", lawHandler.ListJudicialInterpretations) //司法解释列表, 一次性返回全部简介
 	api.GET("/local-laws", lawHandler.ListLocalLaws)                             //地方法律列表, 支持分页, 默认 50 条
+	api.GET("/local-laws/authorities", lawHandler.ListLocalAuthorities)         //地方法律制定机关列表, 一次返回全部, 供三级联动选择
 
 	return router
 }
