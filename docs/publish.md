@@ -148,6 +148,31 @@ sudo
 curl http://127.0.0.1:8080/healthz       # Go 服务
 curl http://101.43.43.3/healthz      # Nginx 代理
 ```
+目前没有购买域名，也没有备案，因此无法开通https；所以先配置测试地址，
+
+用 nginx 把 80 转发到 8080 //服务器，开了80端口，关闭8080端口
+好处是访问时不用带端口号（http://你的IP 即可）。在服务器上：
+sudo vim /etc/nginx/conf.d/lawhelper.conf
+
+写入：
+
+server {
+listen 80;
+server_name _;
+
+      location / {
+          proxy_pass http://127.0.0.1:8080;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      }
+}
+
+然后：
+```shell
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
 第 10 步：配置 HTTPS（推荐）
 
